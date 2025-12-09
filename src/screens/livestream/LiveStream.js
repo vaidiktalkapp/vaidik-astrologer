@@ -216,6 +216,19 @@ export default function LiveStreamScreen() {
         Alert.alert('New Call Request', `${data.userName} wants to join!`);
       });
 
+      streamSocketService.socket.on('call_request_cancelled', (data) => {
+      console.log('❌ Request Cancelled:', data.userId);
+      setCallWaitlist(prev => prev.filter(r => r.userId !== data.userId));
+    });
+
+    streamSocketService.socket.on('user_ended_call', () => {
+      Alert.alert('Call Ended', 'User disconnected.');
+      // Logic to reset host view
+      setCurrentCall(null);
+      setIsCallTimerActive(false);
+      setCallTimer(0);
+    });
+
     } catch (error) {
       console.error('❌ Socket Error:', error);
     }
@@ -354,23 +367,6 @@ export default function LiveStreamScreen() {
 
   const handleNewComment = (data) => {
     setMessages(prev => [...prev, { ...data, id: Date.now().toString(), type: 'comment' }]);
-  };
-
-  const handleNewGift = (data) => {
-    setMessages(prev => [...prev, { ...data, id: Date.now().toString(), type: 'gift' }]);
-    showGiftAnimation(data);
-  };
-
-  const showGiftAnimation = (data) => {
-    const id = Date.now().toString();
-    setActiveGifts(prev => [...prev, { ...data, id }]);
-    
-    // Simple animation logic
-    Animated.sequence([
-      Animated.timing(giftAnimValue, { toValue: 1, duration: 500, useNativeDriver: true }),
-      Animated.delay(1500),
-      Animated.timing(giftAnimValue, { toValue: 0, duration: 500, useNativeDriver: true }),
-    ]).start(() => setActiveGifts(prev => prev.filter(g => g.id !== id)));
   };
 
   const formatCallDuration = (seconds) => {
