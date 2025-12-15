@@ -10,7 +10,6 @@
     "test": "jest"
   },
   "dependencies": {
-    "@ajitpatel28/react-native-truecaller": "^0.8.2",
     "@notifee/react-native": "^9.1.8",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/datetimepicker": "^8.4.5",

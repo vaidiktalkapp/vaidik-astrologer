@@ -21,7 +21,7 @@ import Toast from 'react-native-toast-message';
 import CountryCodePicker from '../../component/CountaryCodePickar';
 import { useAuth } from '../../contexts/AuthContext';
 import { astrologerAuthService } from '../../services';
-import { useTruecaller } from '@ajitpatel28/react-native-truecaller';
+// import { useTruecaller } from '@ajitpatel28/react-native-truecaller'; // 🔴 COMMENTED OUT
 
 const { width, height } = Dimensions.get('window');
 
@@ -34,7 +34,7 @@ const countryRules = {
 };
 
 const Login = ({ navigation }) => {
-  const { sendLoginOtp, loginWithTruecaller, state } = useAuth();
+  const { sendLoginOtp, state /*, loginWithTruecaller*/ } = useAuth(); // 🔴 COMMENTED OUT loginWithTruecaller
   const [phone, setPhone] = useState('');
   const [isCheckingPhone, setIsCheckingPhone] = useState(false);
   const [fcmSetupDone, setFcmSetupDone] = useState(false);
@@ -47,7 +47,8 @@ const Login = ({ navigation }) => {
 
   const styles = LoginStyle;
 
-  // ===== TRUECALLER CONFIGURATION =====
+  // ===== TRUECALLER CONFIGURATION (COMMENTED OUT) =====
+  /*
   const {
     initializeTruecallerSDK,
     openTruecallerForVerification,
@@ -60,8 +61,10 @@ const Login = ({ navigation }) => {
     androidSuccessHandler: handleTruecallerSuccess,
     scopes: ['profile', 'phone', 'openid'],
   });
+  */
 
   // ===== INITIALIZATION =====
+  /* 🔴 COMMENTED OUT TRUECALLER INIT
   useEffect(() => {
     const init = async () => {
       try {
@@ -73,7 +76,9 @@ const Login = ({ navigation }) => {
     };
     init();
   }, []);
+  */
 
+  /* 🔴 COMMENTED OUT TRUECALLER ERROR HANDLING
   useEffect(() => {
     if (truecallerError) {
       console.error('❌ Truecaller error:', truecallerError);
@@ -85,6 +90,7 @@ const Login = ({ navigation }) => {
       }
     }
   }, [truecallerError]);
+  */
 
   useEffect(() => {
     const setupFCMOnMount = async () => {
@@ -125,7 +131,8 @@ const Login = ({ navigation }) => {
     setupFCMOnMount();
   }, []);
 
-  // ===== TRUECALLER HANDLER =====
+  // ===== TRUECALLER HANDLER (COMMENTED OUT) =====
+  /*
   async function handleTruecallerSuccess(data) {
     try {
       console.log('🔄 [Login] Processing Truecaller data...');
@@ -186,6 +193,7 @@ const Login = ({ navigation }) => {
       );
     }
   }
+  */
 
   // ===== HANDLERS =====
 
@@ -282,6 +290,7 @@ const Login = ({ navigation }) => {
     }
   };
 
+  /* 🔴 COMMENTED OUT TRUECALLER CLICK HANDLER
   const handleTruecallerLogin = async () => {
     try {
       const isUsable = await isSdkUsable();
@@ -301,6 +310,7 @@ const Login = ({ navigation }) => {
       Alert.alert('Error', 'Could not open Truecaller. Please try OTP login.');
     }
   };
+  */
 
   const isLoading = state.isLoading || isCheckingPhone || !fcmSetupDone;
 
@@ -391,14 +401,18 @@ const Login = ({ navigation }) => {
                 <Text style={styles.termsText}>.</Text>
               </View>
 
+              {/* 🔴 COMMENTED OUT TRUECALLER UI */}
               {/* Divider */}
+              {/*
               <View style={styles.dividerContainer}>
                 <View style={styles.line} />
                 <Text style={styles.orText}>Or</Text>
                 <View style={styles.line} />
               </View>
+              */}
 
               {/* Truecaller Button */}
+              {/*
               <TouchableOpacity 
                 style={[styles.truecallerButton, isLoading && { opacity: 0.6 }]}
                 onPress={handleTruecallerLogin}
@@ -411,6 +425,7 @@ const Login = ({ navigation }) => {
                 />
                 <Text style={styles.truecallerText}>Login With Truecaller</Text>
               </TouchableOpacity>
+              */}
 
               {/* Sign Up Link */}
               <View style={styles.signupWrapper}>
