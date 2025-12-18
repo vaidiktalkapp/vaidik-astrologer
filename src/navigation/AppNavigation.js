@@ -130,7 +130,7 @@ const AppNavigation = () => {
       <Stack.Screen 
         name="AstrologerReviews" 
         component={AstrologerReviewsScreen}
-        options={{ headerShown: false, animationEnabled: true }}
+        options={{ headerShown: true, animationEnabled: true }}
       />
 
       <Stack.Screen 
@@ -155,7 +155,7 @@ const AppNavigation = () => {
       <Stack.Screen 
         name="EditProfile" 
         component={EditProfileScreen}
-        options={{ headerShown: false, animationEnabled: true }}
+        options={{ headerShown: true, animationEnabled: true }}
       />
       
       <Stack.Screen 
