@@ -158,8 +158,21 @@ class AgoraEngine {
 
   setSpeaker(on) {
     if (!this.engine) return;
-    console.log(`🔊 [Agora] ${on ? 'Enabling' : 'Disabling'} speaker`);
-    this.engine.setEnableSpeakerphone(on);
+    
+    try {
+      console.log(`🔊 [Agora] ${on ? 'Enabling' : 'Disabling'} speaker`);
+      
+      // Try using setEnableSpeakerphone (may not exist in v4.x)
+      if (typeof this.engine.setEnableSpeakerphone === 'function') {
+        this.engine.setEnableSpeakerphone(on);
+      } else {
+        // Fallback: setDefaultAudioRouteToSpeakerphone works for the session
+        console.log('⚠️ [Agora] setEnableSpeakerphone not available, using default route');
+        this.engine.setDefaultAudioRouteToSpeakerphone(on);
+      }
+    } catch (error) {
+      console.warn('⚠️ [Agora] setSpeaker error (non-critical):', error.message);
+    }
   }
 }
 

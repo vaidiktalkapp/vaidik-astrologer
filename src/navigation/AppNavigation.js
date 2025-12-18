@@ -40,6 +40,7 @@ import AstroHistoryChatScreen from '../screens/CallChatSection/AstroHistoryChatS
 import SuggestRemediesScreen from '../screens/CallChatSection/SuggestRemediesScreen';
 import AstrologerReviewsScreen from '../screens/CallChatSection/AstrologerReviewsScreen';
 import AstrologerSuggestedRemediesScreen from '../screens/CallChatSection/AstrologerSuggestedRemediesScreen';
+import MediaViewer from '../screens/CallChatSection/MediaViewer';
 
 const Stack = createStackNavigator();
 
@@ -118,6 +119,12 @@ const AppNavigation = () => {
       <Stack.Screen 
         name="AstroHistoryChat" 
         component={AstroHistoryChatScreen}
+        options={{ headerShown: false, animationEnabled: true }}
+      />
+
+      <Stack.Screen 
+        name="MediaViewer" 
+        component={MediaViewer}
         options={{ headerShown: false, animationEnabled: true }}
       />
 
