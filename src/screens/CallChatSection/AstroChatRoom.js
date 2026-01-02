@@ -421,7 +421,7 @@ const AstroChatRoom = ({ route, navigation }) => {
               <AudioMessageBubble
                 url={item.mediaUrl}
                 durationSec={item.fileDuration}
-                isUser={!item.isMe}
+                isOutgoing={item.isMe}
                 containerStyle={{ backgroundColor: 'transparent' }}
                 waveColor={item.isMe ? COLORS.PRIMARY : COLORS.SECONDARY}
                 playIconColor={item.isMe ? COLORS.PRIMARY : COLORS.SECONDARY}

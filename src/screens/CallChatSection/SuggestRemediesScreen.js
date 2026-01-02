@@ -13,12 +13,26 @@ import {
   Alert,
   ScrollView,
   Modal,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import LinearGradient from 'react-native-linear-gradient';
 
 import ShopifyStorefrontService from '../../services/shopify/shopifyStorefront.service.js';
 import RemediesBackendService from '../../services/shopify/remediesBackend.service.js';
+
+const COLORS = {
+  PRIMARY: '#372643',
+  ACCENT: '#FFC107',
+  BG: '#F5F5F7',
+  CARD: '#FFFFFF',
+  TEXT_PRIMARY: '#1A1A1A',
+  TEXT_SECONDARY: '#6B7280',
+  BORDER: '#E5E7EB',
+  SUCCESS: '#10B981',
+  DANGER: '#EF4444',
+};
 
 const SuggestRemediesScreen = ({ navigation, route }) => {
   const { userId, orderId, userName, sessionType = 'chat' } = route.params;
@@ -30,12 +44,10 @@ const SuggestRemediesScreen = ({ navigation, route }) => {
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Selection state
   const [selectedProducts, setSelectedProducts] = useState(new Map());
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Load categories on mount
   useEffect(() => {
     loadCategories();
   }, []);
@@ -60,10 +72,7 @@ const SuggestRemediesScreen = ({ navigation, route }) => {
     setSelectedCategory(category);
     setLoadingProducts(true);
     try {
-      const prods = await ShopifyStorefrontService.getProductsByCollection(
-        category.id,
-        50,
-      );
+      const prods = await ShopifyStorefrontService.getProductsByCollection(category.id, 50);
       setProducts(prods || []);
     } catch (e) {
       console.log('selectCategory error:', e);
@@ -79,12 +88,9 @@ const SuggestRemediesScreen = ({ navigation, route }) => {
       if (newMap.has(product.id)) {
         newMap.delete(product.id);
       } else {
-        // Extract numeric product ID from Shopify GraphQL ID
         const numericId = extractNumericId(product.id);
         const firstVariant = product.variants?.[0];
-        const numericVariantId = firstVariant
-          ? extractNumericId(firstVariant.id)
-          : null;
+        const numericVariantId = firstVariant ? extractNumericId(firstVariant.id) : null;
 
         newMap.set(product.id, {
           shopifyProductId: numericId,
@@ -101,7 +107,6 @@ const SuggestRemediesScreen = ({ navigation, route }) => {
     });
   };
 
-  // Extract numeric ID from Shopify GraphQL ID
   const extractNumericId = (gid) => {
     if (!gid) return null;
     const match = gid.match(/\/(\d+)$/);
@@ -121,70 +126,57 @@ const SuggestRemediesScreen = ({ navigation, route }) => {
   };
 
   const handleSubmit = async () => {
-  const items = Array.from(selectedProducts.values());
+    const items = Array.from(selectedProducts.values());
 
-  // ✅ FIXED: Validation matches Backend DTO (@MinLength(10))
-  // Check for empty OR too short reasons
-  const incomplete = items.filter(
-    (i) => !i.recommendationReason?.trim() || i.recommendationReason.trim().length < 10
-  );
-
-  if (incomplete.length > 0) {
-    Alert.alert(
-      'Validation Error',
-      `Recommendation reason must be at least 10 characters long.\n\nPlease update ${incomplete.length} product(s).`,
-      [
-        { text: 'OK' },
-        {
-          text: 'Go Back to Edit',
-          onPress: () => setShowDetailsModal(true),
-        },
-      ],
-    );
-    return;
-  }
-
-  try {
-    setSubmitting(true);
-
-    const payload = items.map((item) => ({
-      shopifyProductId: item.shopifyProductId,
-      shopifyVariantId: item.shopifyVariantId,
-      recommendationReason: item.recommendationReason,
-      usageInstructions: item.usageInstructions || '',
-      suggestedInChannel: item.suggestedInChannel,
-    }));
-
-    const res = await RemediesBackendService.suggestBulkRemedies(
-      userId,
-      orderId,
-      payload,
+    const incomplete = items.filter(
+      (i) => !i.recommendationReason?.trim() || i.recommendationReason.trim().length < 10
     );
 
-    // Backend service handles success/fail, but let's double check
-    if (res && (res.success || res.data)) {
+    if (incomplete.length > 0) {
       Alert.alert(
-        'Success ✅',
-        `${items.length} remedies suggested successfully!`,
-        [{ text: 'Done', onPress: () => navigation.goBack() }],
+        'Validation Error',
+        `Recommendation reason must be at least 10 characters.\n\nPlease update ${incomplete.length} product(s).`,
+        [
+          { text: 'OK' },
+          { text: 'Edit', onPress: () => setShowDetailsModal(true) },
+        ]
       );
-    } else {
-      // Show specific error from backend if available
-      const msg = res.message || 'Failed to suggest remedies';
-      Alert.alert('Error ❌', typeof msg === 'string' ? msg : JSON.stringify(msg));
+      return;
     }
-  } catch (e) {
-    console.log('handleSubmit error:', e);
-    // Try to extract backend error message
-    const errorMsg = e.response?.data?.message || e.message || 'Failed to suggest remedies. Please try again.';
-    Alert.alert('Error ❌', Array.isArray(errorMsg) ? errorMsg.join('\n') : errorMsg);
-  } finally {
-    setSubmitting(false);
-  }
-};
+
+    try {
+      setSubmitting(true);
+
+      const payload = items.map((item) => ({
+        shopifyProductId: item.shopifyProductId,
+        shopifyVariantId: item.shopifyVariantId,
+        recommendationReason: item.recommendationReason,
+        usageInstructions: item.usageInstructions || '',
+        suggestedInChannel: item.suggestedInChannel,
+      }));
+
+      const res = await RemediesBackendService.suggestBulkRemedies(userId, orderId, payload);
+
+      if (res && (res.success || res.data)) {
+        Alert.alert('Success ✅', `${items.length} remedies suggested successfully!`, [
+          { text: 'Done', onPress: () => navigation.goBack() },
+        ]);
+      } else {
+        const msg = res.message || 'Failed to suggest remedies';
+        Alert.alert('Error ❌', typeof msg === 'string' ? msg : JSON.stringify(msg));
+      }
+    } catch (e) {
+      console.log('handleSubmit error:', e);
+      const errorMsg =
+        e.response?.data?.message || e.message || 'Failed to suggest remedies. Please try again.';
+      Alert.alert('Error ❌', Array.isArray(errorMsg) ? errorMsg.join('\n') : errorMsg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const filteredProducts = products.filter((p) =>
-    p.title.toLowerCase().includes(searchQuery.toLowerCase()),
+    p.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const renderCategory = ({ item }) => {
@@ -193,14 +185,17 @@ const SuggestRemediesScreen = ({ navigation, route }) => {
       <TouchableOpacity
         style={[styles.categoryChip, isSelected && styles.categoryChipActive]}
         onPress={() => selectCategory(item)}
+        activeOpacity={0.7}
       >
-        <Text
-          style={[
-            styles.categoryText,
-            isSelected && styles.categoryTextActive,
-          ]}
-          numberOfLines={1}
-        >
+        {isSelected && (
+          <LinearGradient
+            colors={['#FFC107', '#FFD54F']}
+            style={StyleSheet.absoluteFill}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          />
+        )}
+        <Text style={[styles.categoryText, isSelected && styles.categoryTextActive]} numberOfLines={1}>
           {item.title}
         </Text>
       </TouchableOpacity>
@@ -215,19 +210,16 @@ const SuggestRemediesScreen = ({ navigation, route }) => {
       <TouchableOpacity
         style={[styles.productCard, isSelected && styles.productCardSelected]}
         onPress={() => toggleProductSelection(item)}
+        activeOpacity={0.9}
       >
         {isSelected && (
           <View style={styles.checkBadge}>
-            <Icon name="check" size={16} color="#FFF" />
+            <Icon name="check-circle" size={24} color={COLORS.ACCENT} />
           </View>
         )}
 
         <Image
-          source={
-            imageUri
-              ? { uri: imageUri }
-              : require('../../assets/onlyLogoVaidik.png')
-          }
+          source={imageUri ? { uri: imageUri } : require('../../assets/onlyLogoVaidik.png')}
           style={styles.productImage}
           resizeMode="cover"
         />
@@ -242,10 +234,8 @@ const SuggestRemediesScreen = ({ navigation, route }) => {
     );
   };
 
-const renderDetailsModal = () => {
+  const renderDetailsModal = () => {
   const items = Array.from(selectedProducts.entries());
-
-  if (!showDetailsModal) return null;
 
   return (
     <Modal
@@ -258,19 +248,30 @@ const renderDetailsModal = () => {
         <View style={styles.modalContent}>
           {/* Header */}
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              Add Details ({items.length} product{items.length !== 1 ? 's' : ''})
-            </Text>
-            <TouchableOpacity onPress={() => setShowDetailsModal(false)}>
-              <Icon name="close" size={24} color="#333" />
+            <View>
+              <Text style={styles.modalTitle}>Add Recommendation Details</Text>
+              <Text style={styles.modalSubtitle}>
+                {items.length} product{items.length !== 1 ? 's' : ''} selected
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setShowDetailsModal(false)}
+              style={styles.modalCloseBtn}
+            >
+              <Icon name="close" size={24} color={COLORS.TEXT_SECONDARY} />
             </TouchableOpacity>
           </View>
 
-          {/* Body: products + text fields */}
-          <ScrollView style={styles.modalScroll}>
-            {items.map(([productId, item]) => (
+          {/* Body */}
+          <ScrollView 
+            style={styles.modalScroll} 
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.modalScrollContent}
+          >
+            {items.map(([productId, item], index) => (
               <View key={productId} style={styles.detailCard}>
-                <View style={styles.detailHeader}>
+                <View style={styles.detailCardHeader}>
+                  <Text style={styles.detailCardNumber}>{index + 1}</Text>
                   <Image
                     source={
                       item.imageUrl
@@ -287,62 +288,62 @@ const renderDetailsModal = () => {
                   </View>
                 </View>
 
-                <Text style={styles.fieldLabel}>
-                  Recommendation Reason <Text style={styles.requiredStar}>*</Text>
-                </Text>
-                <TextInput
-                  style={styles.textArea}
-                  placeholder="Why are you suggesting this product?"
-                  value={item.recommendationReason}
-                  onChangeText={(txt) =>
-                    updateSelectedProductDetail(
-                      productId,
-                      'recommendationReason',
-                      txt,
-                    )
-                  }
-                  multiline
-                  maxLength={300}
-                />
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>
+                    Why recommend this? <Text style={styles.requiredStar}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.textArea}
+                    placeholder="Explain why this remedy is beneficial..."
+                    placeholderTextColor={COLORS.TEXT_SECONDARY}
+                    value={item.recommendationReason}
+                    onChangeText={(txt) =>
+                      updateSelectedProductDetail(productId, 'recommendationReason', txt)
+                    }
+                    multiline
+                    maxLength={300}
+                  />
+                  <Text style={styles.charCount}>
+                    {item.recommendationReason?.length || 0}/300 (min 10 chars)
+                  </Text>
+                </View>
 
-                <Text style={styles.fieldLabel}>
-                  Usage Instructions (optional)
-                </Text>
-                <TextInput
-                  style={styles.textArea}
-                  placeholder="How to use this product..."
-                  value={item.usageInstructions}
-                  onChangeText={(txt) =>
-                    updateSelectedProductDetail(
-                      productId,
-                      'usageInstructions',
-                      txt,
-                    )
-                  }
-                  multiline
-                  maxLength={300}
-                />
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>Usage Instructions (Optional)</Text>
+                  <TextInput
+                    style={styles.textArea}
+                    placeholder="How should the user use this product..."
+                    placeholderTextColor={COLORS.TEXT_SECONDARY}
+                    value={item.usageInstructions}
+                    onChangeText={(txt) =>
+                      updateSelectedProductDetail(productId, 'usageInstructions', txt)
+                    }
+                    multiline
+                    maxLength={300}
+                  />
+                  <Text style={styles.charCount}>{item.usageInstructions?.length || 0}/300</Text>
+                </View>
               </View>
             ))}
           </ScrollView>
 
-          {/* Footer: submit button */}
-          <TouchableOpacity
-            style={[
-              styles.submitBtn,
-              submitting && styles.submitBtnDisabled,
-            ]}
-            onPress={handleSubmit}
-            disabled={submitting}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#FFF" />
-            ) : (
-              <Text style={styles.submitBtnText}>
-                Suggest {items.length} Remedies →
-              </Text>
-            )}
-          </TouchableOpacity>
+          {/* Footer */}
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
+              onPress={handleSubmit}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Icon name="send" size={18} color="#FFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.submitBtnText}>Suggest {items.length} Remedies</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -351,56 +352,61 @@ const renderDetailsModal = () => {
 
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+      <LinearGradient colors={[COLORS.PRIMARY, '#4A3456']} style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Icon name="arrow-left" size={24} color="#FFF" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Suggest Remedies</Text>
           <Text style={styles.headerSubtitle}>for {userName}</Text>
         </View>
-        <View style={{ width: 24 }} />
-      </View>
+        <View style={{ width: 40 }} />
+      </LinearGradient>
 
       {/* Search */}
       <View style={styles.searchContainer}>
-        <Icon
-          name="magnify"
-          size={20}
-          color="#999"
-          style={styles.searchIcon}
-        />
+        <Icon name="magnify" size={20} color={COLORS.TEXT_SECONDARY} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search products..."
-          placeholderTextColor="#999"
+          placeholderTextColor={COLORS.TEXT_SECONDARY}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
+        {searchQuery ? (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Icon name="close-circle" size={20} color={COLORS.TEXT_SECONDARY} />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {/* Categories */}
       {loading ? (
         <View style={styles.loader}>
-          <ActivityIndicator size="large" color="#FFD700" />
+          <ActivityIndicator size="large" color={COLORS.PRIMARY} />
+          <Text style={styles.loaderText}>Loading categories...</Text>
         </View>
       ) : (
         <>
-          <FlatList
-            data={categories}
-            keyExtractor={(item) => item.id}
-            renderItem={renderCategory}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoriesList}
-          />
+          <View style={styles.categoriesSection}>
+            <Text style={styles.sectionTitle}>Categories</Text>
+            <FlatList
+              data={categories}
+              keyExtractor={(item) => item.id}
+              renderItem={renderCategory}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoriesList}
+            />
+          </View>
 
           {/* Products */}
           {loadingProducts ? (
             <View style={styles.loader}>
-              <ActivityIndicator size="large" color="#FFD700" />
+              <ActivityIndicator size="large" color={COLORS.PRIMARY} />
+              <Text style={styles.loaderText}>Loading products...</Text>
             </View>
           ) : (
             <FlatList
@@ -408,11 +414,13 @@ const renderDetailsModal = () => {
               keyExtractor={(item) => item.id}
               renderItem={renderProduct}
               numColumns={2}
+              columnWrapperStyle={styles.productRow}
               contentContainerStyle={styles.productsList}
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
-                  <Icon name="package-variant" size={64} color="#ddd" />
+                  <Icon name="package-variant-closed" size={80} color={COLORS.BORDER} />
                   <Text style={styles.emptyText}>No products found</Text>
+                  <Text style={styles.emptySubtext}>Try selecting a different category</Text>
                 </View>
               }
             />
@@ -424,22 +432,20 @@ const renderDetailsModal = () => {
       {selectedProducts.size > 0 && (
         <View style={styles.selectionFooter}>
           <View style={styles.selectionInfo}>
-            <Text style={styles.selectionCount}>
-              {selectedProducts.size} selected
-            </Text>
-            <TouchableOpacity
-              onPress={() => setSelectedProducts(new Map())}
-            >
+            <View style={styles.selectionBadge}>
+              <Text style={styles.selectionCount}>{selectedProducts.size}</Text>
+            </View>
+            <Text style={styles.selectionText}>product{selectedProducts.size !== 1 ? 's' : ''} selected</Text>
+          </View>
+          <View style={styles.footerActions}>
+            <TouchableOpacity onPress={() => setSelectedProducts(new Map())} style={styles.clearBtn}>
               <Text style={styles.clearText}>Clear</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.nextBtn} onPress={() => setShowDetailsModal(true)}>
+              <Text style={styles.nextBtnText}>Continue</Text>
+              <Icon name="arrow-right" size={18} color="#FFF" />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.nextBtn}
-            onPress={() => setShowDetailsModal(true)}
-          >
-            <Text style={styles.nextBtnText}>Next</Text>
-            <Icon name="arrow-right" size={18} color="#000" />
-          </TouchableOpacity>
         </View>
       )}
 
@@ -451,120 +457,208 @@ const renderDetailsModal = () => {
 export default SuggestRemediesScreen;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0C1317' },
+  container: { flex: 1, backgroundColor: COLORS.BG },
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#1F2C34',
+    paddingVertical: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: { elevation: 4 },
+    }),
   },
+  backBtn: { padding: 4 },
   headerCenter: { flex: 1, marginLeft: 12 },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#FFF' },
-  headerSubtitle: { fontSize: 12, color: '#8696A0', marginTop: 2 },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#FFF', letterSpacing: 0.3 },
+  headerSubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
 
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1F2C34',
-    marginHorizontal: 12,
-    marginVertical: 10,
-    borderRadius: 10,
-    paddingHorizontal: 12,
+    backgroundColor: COLORS.CARD,
+    marginHorizontal: 16,
+    marginVertical: 12,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: { elevation: 1 },
+    }),
   },
   searchIcon: { marginRight: 8 },
   searchInput: {
     flex: 1,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#E9EDEF',
+    paddingVertical: 12,
+    fontSize: 15,
+    color: COLORS.TEXT_PRIMARY,
   },
 
+  categoriesSection: {
+    backgroundColor: COLORS.CARD,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.TEXT_SECONDARY,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
   categoriesList: {
     paddingHorizontal: 12,
-    paddingVertical: 10,
   },
   categoryChip: {
-    paddingHorizontal: 18,
-    paddingVertical: 10, // ✅ FIXED: Reduced padding
-    borderRadius: 20,
-    backgroundColor: '#1F2C34',
-    marginRight: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 24,
+    backgroundColor: COLORS.CARD,
+    marginHorizontal: 4,
     minWidth: 100,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.BORDER,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 2,
+      },
+      android: { elevation: 2 },
+    }),
   },
   categoryChipActive: {
-    backgroundColor: '#FFD700',
+    borderColor: COLORS.ACCENT,
+    borderWidth: 2,
   },
-  categoryText: { 
+  categoryText: {
     fontSize: 14,
-    fontWeight: '600', 
-    color: '#E9EDEF',
+    fontWeight: '600',
+    color: COLORS.TEXT_PRIMARY,
+    zIndex: 1,
   },
-  categoryTextActive: { color: '#000' },
+  categoryTextActive: {
+    color: COLORS.PRIMARY,
+    fontWeight: '700',
+  },
 
   productsList: {
-    paddingHorizontal: 8,
-    paddingBottom: 80,
+    paddingHorizontal: 12,
+    paddingTop: 16,
+    paddingBottom: 100,
+  },
+  productRow: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
   },
   productCard: {
     flex: 1,
-    margin: 6,
-    backgroundColor: '#1F2C34',
-    borderRadius: 12,
-    overflow: 'hidden',
     maxWidth: '48%',
-    position: 'relative',
+    backgroundColor: COLORS.CARD,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 4,
+      },
+      android: { elevation: 3 },
+    }),
   },
   productCardSelected: {
-    borderWidth: 2,
-    borderColor: '#FFD700',
+    borderColor: COLORS.ACCENT,
+    ...Platform.select({
+      ios: {
+        shadowColor: COLORS.ACCENT,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: { elevation: 6 },
+    }),
   },
   checkBadge: {
     position: 'absolute',
     top: 8,
     right: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#FFD700',
-    justifyContent: 'center',
-    alignItems: 'center',
     zIndex: 10,
+    backgroundColor: COLORS.CARD,
+    borderRadius: 12,
   },
   productImage: {
     width: '100%',
-    height: 140,
-    backgroundColor: '#2A3942',
+    height: 160,
+    backgroundColor: COLORS.BG,
   },
-  productInfo: { padding: 10 },
+  productInfo: { padding: 12 },
   productName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#E9EDEF',
-    marginBottom: 4,
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: 6,
+    lineHeight: 20,
   },
-  productPrice: { fontSize: 15, fontWeight: '700', color: '#FFD700' },
+  productPrice: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.PRIMARY,
+  },
 
   loader: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loaderText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: COLORS.TEXT_SECONDARY,
+    fontWeight: '500',
   },
 
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 100,
+    paddingVertical: 80,
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '600',
-    color: '#8696A0',
-    marginTop: 12,
+    color: COLORS.TEXT_PRIMARY,
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: COLORS.TEXT_SECONDARY,
+    marginTop: 6,
   },
 
   selectionFooter: {
@@ -575,137 +669,217 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1F2C34',
+    backgroundColor: COLORS.CARD,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderTopWidth: 1,
-    borderTopColor: '#2A3942',
+    borderTopColor: COLORS.BORDER,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: { elevation: 8 },
+    }),
   },
-  selectionInfo: { flexDirection: 'row', alignItems: 'center' },
-  selectionCount: { fontSize: 15, fontWeight: '600', color: '#E9EDEF' },
+  selectionInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectionBadge: {
+    backgroundColor: COLORS.PRIMARY,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  selectionCount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  selectionText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.TEXT_PRIMARY,
+  },
+  footerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  clearBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
   clearText: {
-    fontSize: 13,
-    color: '#FF6B6B',
-    marginLeft: 12,
+    fontSize: 14,
+    color: COLORS.DANGER,
     fontWeight: '600',
   },
   nextBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFD700',
+    backgroundColor: COLORS.PRIMARY,
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 6,
   },
-  nextBtnText: { fontSize: 14, fontWeight: '700', color: '#000', marginRight: 6 },
+  nextBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFF',
+  },
 
-  // Modal ✅ FIXED: All styles properly organized
+  // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '90%',
+    backgroundColor: COLORS.CARD,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '92%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    alignItems: 'flex-start',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: COLORS.BORDER,
   },
-  modalTitle: { fontSize: 17, fontWeight: '700', color: '#000' },
-  modalScroll: { flex: 1, paddingHorizontal: 16 },
-
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.TEXT_PRIMARY,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: COLORS.TEXT_SECONDARY,
+    marginTop: 4,
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  modalScroll: {
+    maxHeight: '60%', 
+    paddingHorizontal: 20,
+  },
+  modalScrollContent: {
+  paddingBottom: 20,  // ✅ Add padding to content
+},
   detailCard: {
-    paddingVertical: 16,
+    paddingVertical: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: COLORS.BORDER,
   },
-  detailHeader: { flexDirection: 'row', marginBottom: 12 },
+  detailCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  detailCardNumber: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.PRIMARY,
+    marginRight: 12,
+    width: 24,
+  },
   detailImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    backgroundColor: '#f0f0f0',
+    width: 64,
+    height: 64,
+    borderRadius: 12,
+    backgroundColor: COLORS.BG,
+    marginRight: 12,
   },
-  detailHeaderText: { flex: 1, marginLeft: 12, justifyContent: 'center' },
-  detailProductName: { fontSize: 14, fontWeight: '600', color: '#000' },
-  detailPrice: { fontSize: 13, fontWeight: '700', color: '#FFD700', marginTop: 4 },
-
-  fieldLabel: {
-    fontSize: 12,
+  detailHeaderText: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  detailProductName: {
+    fontSize: 15,
     fontWeight: '600',
-    color: '#555',
-    marginBottom: 6,
+    color: COLORS.TEXT_PRIMARY,
+    lineHeight: 20,
   },
-  fieldLabelError: {
-    color: '#EF4444',
+  detailPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.PRIMARY,
+    marginTop: 4,
+  },
+
+  fieldGroup: {
+    marginBottom: 16,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: 8,
   },
   requiredStar: {
-    color: '#EF4444',
+    color: COLORS.DANGER,
     fontSize: 14,
   },
   textArea: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 13,
-    color: '#000',
-    minHeight: 70,
+    borderWidth: 1.5,
+    borderColor: COLORS.BORDER,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    color: COLORS.TEXT_PRIMARY,
+    minHeight: 90,
     textAlignVertical: 'top',
-    marginBottom: 12,
+    backgroundColor: COLORS.BG,
   },
-  textAreaError: {
-    borderColor: '#EF4444',
+  charCount: {
+    fontSize: 11,
+    color: COLORS.TEXT_SECONDARY,
+    marginTop: 4,
+    textAlign: 'right',
   },
 
+  modalFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.BORDER,
+  },
   submitBtn: {
-    backgroundColor: '#FFD700',
-    marginHorizontal: 16,
-    marginVertical: 12,
-    paddingVertical: 14,
-    borderRadius: 10,
+    backgroundColor: COLORS.PRIMARY,
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: COLORS.PRIMARY,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: { elevation: 4 },
+    }),
   },
   submitBtnDisabled: {
-    backgroundColor: '#D1D5DB',
+    backgroundColor: COLORS.TEXT_SECONDARY,
+    opacity: 0.6,
   },
-  submitBtnText: { fontSize: 15, fontWeight: '700', color: '#000' },
-  modalOverlay: {
-  flex: 1,
-  backgroundColor: 'rgba(0,0,0,0.5)',
-  justifyContent: 'flex-end',
-},
-modalContent: {
-  backgroundColor: '#FFF',
-  borderTopLeftRadius: 20,
-  borderTopRightRadius: 20,
-  maxHeight: '90%',      // so body + fields are visible
-},
-modalHeader: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  paddingHorizontal: 16,
-  paddingVertical: 14,
-  borderBottomWidth: 1,
-  borderBottomColor: '#f0f0f0',
-},
-modalScroll: {
-  maxHeight: '70%',       // body area
-  paddingHorizontal: 16,
-},
-detailCard: {
-  paddingVertical: 16,
-  borderBottomWidth: 1,
-  borderBottomColor: '#f0f0f0',
-},
+  submitBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFF',
+  },
 });

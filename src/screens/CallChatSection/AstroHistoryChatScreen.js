@@ -265,10 +265,8 @@ const AstroHistoryChatScreen = ({ route }) => {
               <AudioMessageBubble
                 url={item.mediaUrl}
                 durationSec={item.fileDuration}
-                isUser={!isMe}
-                containerStyle={{
-                  backgroundColor: 'transparent',
-                }}
+                isOutgoing={isMe}        
+                bubbleBg={isMe ? COLORS.BUBBLE_ASTRO : COLORS.BUBBLE_USER}
                 waveColor={isMe ? COLORS.PRIMARY : COLORS.SECONDARY}
                 playIconColor={isMe ? COLORS.PRIMARY : COLORS.SECONDARY}
               />

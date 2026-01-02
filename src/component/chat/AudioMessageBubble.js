@@ -11,56 +11,116 @@ const formatTime = (sec = 0) => {
   return `${mm}:${ss}`;
 };
 
-export default function AudioMessageBubble({ url, durationSec, isUser }) {
+export default function AudioMessageBubble({
+  url,
+  durationSec = 0,
+  isOutgoing = false,      // ✅ renamed
+  bubbleBg,                // optional: pass bubble bg for better contrast decisions
+}) {
   const ref = useRef(null);
+
   const [paused, setPaused] = useState(true);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(durationSec || 0);
 
-  const displayTime = useMemo(() => {
-    // Show remaining time when playing, total when paused
-    const timeToShow = paused ? (duration || durationSec || 0) : (duration - current);
-    return formatTime(timeToShow);
-  }, [current, duration, durationSec, paused]);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [seekValue, setSeekValue] = useState(0);
+  const [trackWidth, setTrackWidth] = useState(0);
 
-  const handleSeek = (value) => {
+  const effectiveDuration = duration || durationSec || 0;
+  const effectiveCurrent = isSeeking ? seekValue : current;
+
+  const progressPct = useMemo(() => {
+    if (!effectiveDuration) return 0;
+    return Math.max(0, Math.min(1, effectiveCurrent / effectiveDuration));
+  }, [effectiveCurrent, effectiveDuration]);
+
+  // Show remaining when playing; total when paused
+  const displayTime = useMemo(() => {
+    if (!effectiveDuration) return '00:00';
+    const timeToShow = paused
+      ? effectiveDuration
+      : Math.max(0, effectiveDuration - effectiveCurrent);
+    return formatTime(timeToShow);
+  }, [paused, effectiveDuration, effectiveCurrent]);
+
+  const handleSeekComplete = (value) => {
     ref.current?.seek?.(value);
     setCurrent(value);
+    setIsSeeking(false);
   };
+
+  // Colors tuned for your bubble backgrounds (white + light purple)
+  const trackBg = 'rgba(0,0,0,0.12)';      // visible on white + purple
+  const trackFill = '#5A2CCF';             // purple fill
+  const timeColor = '#4B5563';             // readable on white + purple
+  const playIconColor = isOutgoing ? '#372643' : '#5A2CCF';
+
+  const THUMB = 12;
+  const thumbLeft = Math.max(
+    0,
+    Math.min(trackWidth - THUMB, progressPct * trackWidth - THUMB / 2)
+  );
 
   return (
     <View style={styles.container}>
-      {/* Play/Pause Button */}
       <TouchableOpacity
         onPress={() => setPaused(p => !p)}
-        style={[styles.playBtn, isUser ? styles.playBtnUser : styles.playBtnOther]}
+        style={[styles.playBtn, isOutgoing ? styles.playBtnOutgoing : styles.playBtnIncoming]}
         activeOpacity={0.7}
       >
         <Ionicons
           name={paused ? 'play' : 'pause'}
           size={20}
-          color={isUser ? '#FFF' : '#5A2CCF'}
+          color={playIconColor}
         />
       </TouchableOpacity>
 
-      {/* Waveform/Slider + Duration */}
-      <View style={styles.waveformContainer}>
-        <Slider
-          value={current}
-          minimumValue={0}
-          maximumValue={duration || 1}
-          onSlidingComplete={handleSeek}
-          minimumTrackTintColor={isUser ? '#B8A3FF' : '#5A2CCF'}
-          maximumTrackTintColor={isUser ? 'rgba(255,255,255,0.3)' : '#DDD'}
-          thumbTintColor={isUser ? '#FFF' : '#5A2CCF'}
-          style={styles.slider}
-        />
-        <Text style={[styles.durationText, { color: isUser ? 'rgba(255,255,255,0.9)' : '#666' }]}>
+      <View style={styles.right}>
+        <View
+          style={styles.trackWrap}
+          onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+        >
+          {/* Thick custom track */}
+          <View style={[styles.trackBg, { backgroundColor: trackBg }]} />
+          <View
+            style={[
+              styles.trackFill,
+              { backgroundColor: trackFill, width: `${progressPct * 100}%` },
+            ]}
+          />
+
+          {/* Custom thumb so it’s always visible */}
+          <View
+            style={[
+              styles.thumb,
+              { left: thumbLeft, backgroundColor: trackFill },
+            ]}
+          />
+
+          {/* Slider for gestures only (nearly invisible) */}
+          <Slider
+            value={effectiveCurrent}
+            minimumValue={0}
+            maximumValue={effectiveDuration || 1}
+            onSlidingStart={() => {
+              setIsSeeking(true);
+              setSeekValue(effectiveCurrent);
+            }}
+            onValueChange={(v) => setSeekValue(v)}
+            onSlidingComplete={handleSeekComplete}
+            minimumTrackTintColor="transparent"
+            maximumTrackTintColor="transparent"
+            thumbTintColor="transparent"
+            style={styles.sliderOverlay}
+          />
+        </View>
+
+        <Text style={[styles.durationText, { color: timeColor }]}>
           {displayTime}
         </Text>
       </View>
 
-      {/* Hidden Video component for audio playback */}
       <Video
         ref={ref}
         source={{ uri: url }}
@@ -69,7 +129,9 @@ export default function AudioMessageBubble({ url, durationSec, isUser }) {
         playInBackground={false}
         playWhenInactive={false}
         onLoad={(e) => setDuration(e?.duration || durationSec || 0)}
-        onProgress={(e) => setCurrent(e?.currentTime || 0)}
+        onProgress={(e) => {
+          if (!isSeeking) setCurrent(e?.currentTime || 0);
+        }}
         onEnd={() => {
           setPaused(true);
           setCurrent(0);
@@ -85,10 +147,11 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-    minWidth: 200,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    minWidth: 220,
   },
+
   playBtn: {
     width: 38,
     height: 38,
@@ -96,32 +159,59 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
   },
-  playBtnUser: {
-    backgroundColor: '#5A2CCF',
-  },
-  playBtnOther: {
+  // Incoming (left bubble - white)
+  playBtnIncoming: {
     backgroundColor: '#FFF',
     borderWidth: 1,
     borderColor: '#E0E0E0',
   },
-  waveformContainer: {
-    flex: 1,
-    marginLeft: 10,
+  // Outgoing (right bubble - light purple)
+  playBtnOutgoing: {
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+
+  right: { flex: 1, marginLeft: 10 },
+
+  trackWrap: {
+    height: 26,
     justifyContent: 'center',
   },
-  slider: {
+  trackBg: {
+    height: 6,
+    borderRadius: 999,
     width: '100%',
-    height: 30,
   },
+  trackFill: {
+    position: 'absolute',
+    left: 0,
+    height: 6,
+    borderRadius: 999,
+  },
+  thumb: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    top: '50%',
+    marginTop: -6,
+  },
+
+  // Almost invisible slider (touch only)
+  sliderOverlay: {
+    position: 'absolute',
+    left: -10,
+    right: -10,
+    height: 44,
+    opacity: 0.02,
+  },
+
   durationText: {
     fontSize: 11,
-    fontWeight: '500',
-    marginTop: -4,
+    fontWeight: '700',
+    marginTop: 2,
     alignSelf: 'flex-end',
   },
 });
