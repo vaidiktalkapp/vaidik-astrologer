@@ -234,39 +234,6 @@ export const checkMediaPermissions = async () => {
   }
 };
 
-// ===== LOCATION PERMISSION =====
-
-/**
- * Request Location Permission
- */
-export const requestLocationPermission = async () => {
-  if (Platform.OS === 'android') {
-    try {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        {
-          title: 'Location Permission',
-          message: 'VaidikTalk needs access to your location',
-          buttonNeutral: 'Ask Me Later',
-          buttonNegative: 'Cancel',
-          buttonPositive: 'OK',
-        }
-      );
-      return granted === PermissionsAndroid.RESULTS.GRANTED;
-    } catch (err) {
-      console.warn('Location permission error:', err);
-      return false;
-    }
-  } else {
-    // iOS
-    const result = await check(PERMISSIONS.IOS.LOCATION_WHEN_IN_USE);
-    if (result === RESULTS.GRANTED) {
-      return true;
-    }
-    const requestResult = await request(PERMISSIONS.IOS.LOCATION_WHEN_IN_USE);
-    return requestResult === RESULTS.GRANTED;
-  }
-};
 
 // ===== MICROPHONE PERMISSION =====
 
