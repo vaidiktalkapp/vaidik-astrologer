@@ -43,6 +43,12 @@ class NotificationManager {
         bypassDnd: true,
       });
 
+  await notifee.createChannel({
+  id: 'astrologer_alert_v1',
+  name: 'Live Stream Notifications',
+  importance: AndroidImportance.HIGH, // MUST BE HIGH
+});
+
       // 2. CHAT MESSAGES - Soft Tone
       await notifee.createChannel({
         id: 'astro_messages_v5',

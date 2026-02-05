@@ -25,7 +25,7 @@ import AgoraEngine from '../../services/agora/engine';
 import { STORAGE_KEYS } from '../../config/constants';
 import { useSession } from '../../contexts/SessionContext';
 import { styles, COLORS } from '../../style/CallStyle';
-import notifee from '@notifee/react-native';
+import notifee, { AndroidImportance, AndroidForegroundServiceType } from '@notifee/react-native';
 
 const CallScreen = ({ route, navigation }) => {
   const { sessionId, userName = 'User', userImage, callType = 'audio', ratePerMinute = 10 } = route.params || {};
@@ -50,34 +50,48 @@ const CallScreen = ({ route, navigation }) => {
   const hasEndedRef = useRef(false);
   const { startSession, endSession } = useSession();
 
-  const startCallForegroundService = async () => {
-  await notifee.displayNotification({
-    id: 'astro_ongoing_call',
-    title: 'Active Consultation',
-    body: `You are currently on a call with ${userName || 'User'}`,
-    android: {
-      channelId: 'astrologer_alert_v1',
-      asForegroundService: true, // Required for Google compliance
-      ongoing: true,
-      color: '#FFC107',
-      pressAction: { id: 'default', launchActivity: 'default' },
-    },
-  });
-};
+  useEffect(() => {
+    const handleForegroundService = async () => {
+      if (isConnected) {
+        // 1. Create Channel
+        await notifee.createChannel({
+          id: 'astrologer_call_service',
+          name: 'Active Call Service',
+          importance: AndroidImportance.HIGH,
+        });
 
-const stopCallForegroundService = async () => {
-  await notifee.stopForegroundService();
-};
+        // 2. Start Service
+        await notifee.displayNotification({
+          id: 'astro_active_call',
+          title: 'Ongoing Consultation',
+          body: 'Tap to return to call',
+          android: {
+            channelId: 'astrologer_call_service',
+            asForegroundService: true,
+            // Types must match Manifest
+            foregroundServiceTypes: [
+              AndroidForegroundServiceType.MICROPHONE,
+              ...(isVideoCall ? [AndroidForegroundServiceType.CAMERA] : [])
+            ],
+            ongoing: true,
+            color: '#4CAF50',
+            smallIcon: 'ic_launcher',
+            pressAction: { id: 'default', launchActivity: 'default' },
+          },
+        });
+      } else {
+        await notifee.stopForegroundService();
+      }
+    };
 
-// Trigger based on connection
-useEffect(() => {
-  if (isConnected) {
-    startCallForegroundService();
-  }
-  return () => {
-    stopCallForegroundService();
-  };
-}, [isConnected]);
+    handleForegroundService();
+
+    return () => {
+      notifee.stopForegroundService();
+    };
+  }, [isConnected]);
+
+  // --- SOCKET SETUP ---
 
   useEffect(() => {
     startSession('call', route.params);

@@ -26,7 +26,7 @@ import { streamSocketService } from '../../services/socket/streamSocketService';
 import { useAuth } from '../../contexts/AuthContext';
 import { styles } from '../../style/LiveStreamStyle';
 import { astrologerService } from '../../services/api/astrologer.service';
-import notifee from '@notifee/react-native';
+import notifee, { AndroidImportance, AndroidForegroundServiceType } from '@notifee/react-native';
 
 export default function LiveStreamScreen() {
   const navigation = useNavigation();
@@ -136,32 +136,76 @@ export default function LiveStreamScreen() {
 }, [isCallTimerActive, callEndTime]);
 
 const startStreamForegroundService = async () => {
-  await notifee.displayNotification({
-    id: 'astro_live_stream',
-    title: 'You are Live',
-    body: 'Your camera and microphone are active for the livestream.',
-    android: {
-      channelId: 'astrologer_alert_v1',
-      asForegroundService: true, 
-      ongoing: true,
-      color: '#FFC107',
-      pressAction: { id: 'default', launchActivity: 'default' },
-    },
-  });
+  try {
+    // Create channel (Required for Android O+)
+    await notifee.createChannel({
+      id: 'astrologer_alert_v1',
+      name: 'Live Stream Alerts',
+      importance: AndroidImportance.HIGH,
+    });
+
+    await notifee.displayNotification({
+      id: 'astro_live_stream',
+      title: 'You are Live',
+      body: 'Camera and Microphone are active',
+      android: {
+        channelId: 'astrologer_alert_v1',
+        
+        // 1. THIS MAKES IT PERSISTENT (Prevents swipe-to-dismiss)
+        ongoing: true, 
+        
+        // 2. THIS LINKS IT TO THE SERVICE REGISTERED IN INDEX.JS
+        asForegroundService: true, 
+        
+        // 3. Service Types (Use Integers to avoid import errors: 64=Camera, 128=Mic)
+        foregroundServiceTypes: [64, 128], 
+
+        color: '#FFC107',
+        smallIcon: 'ic_launcher', 
+        
+        // 4. ACTION WHEN TAPPED (Brings app to front)
+        pressAction: { 
+          id: 'default', 
+          launchActivity: 'default' 
+        },
+      },
+    });
+  } catch (err) {
+    console.error("Foreground Service Error:", err);
+  }
 };
 
-const stopStreamForegroundService = async () => {
-  await notifee.stopForegroundService();
-};
-
-// Start when the stream initializes, stop on cleanup
-useEffect(() => {
-  startStreamForegroundService();
-  
-  return () => {
-    stopStreamForegroundService();
+  const stopStreamForegroundService = async () => {
+    try {
+      await notifee.stopForegroundService();
+    } catch (e) {}
   };
-}, []);
+
+  // ✅ UPDATED INITIALIZATION EFFECT
+  useEffect(() => {
+    if (!userId) return;
+
+    let isMounted = true;
+
+    const init = async () => {
+      // 1. Initialize Agora first (Video/Audio hardware access)
+      await initializeAgora();
+      await connectSocket();
+      
+      // 2. Start Notification ONLY after Agora is ready
+      if (isMounted) {
+        await startStreamForegroundService();
+      }
+    };
+
+    init();
+
+    return () => {
+      isMounted = false;
+      stopStreamForegroundService();
+      cleanup();
+    };
+  }, [userId]);
 
   const initializeAgora = async () => {
     try {
