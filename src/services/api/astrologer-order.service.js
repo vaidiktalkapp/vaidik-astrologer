@@ -1,47 +1,20 @@
 // src/services/api/astrologer-order.service.js
 import { apiClient } from './axios.instance';
 
-/**
- * Normalized session object shape:
- * {
- *   id: string,
- *   orderId: string | null,
- *   type: 'chat' | 'call',
- *   status: string,
- *   startedAt: string | null,
- *   endedAt: string | null,
- *   durationSeconds: number,
- *   amount: number,
- *   user: {
- *     id: string | null,
- *     name: string | null,
- *     avatar: string | null,
- *     phoneNumber?: string | null,
- *   },
- *   lastPreview: string | null,
- *   lastInteractionAt: string | null,
- * }
- */
-
 class AstrologerOrderService {
   /**
-   * ✅ Get astrologer orders (from OrdersController.getAstrologerOrders)
-   * Backend: GET /orders/astrologer/my-orders
-   * Query: ?page=1&limit=20&status=completed&type=conversation|call|chat
+   * ✅ Get astrologer orders
    */
   async getAstrologerOrders({ page = 1, limit = 20, status, type } = {}) {
     try {
-
       const params = { page, limit };
       if (status) params.status = status;
       if (type) params.type = type;
 
       const res = await apiClient.get('/orders/astrologer/my-orders', { params });
-
-      // Backend already returns: { success, data: orders, pagination }
       const ok = res.data?.success !== false;
       const data = ok ? res.data.data : { data: [], pagination: { page, limit, total: 0, pages: 0 } };
-      console.log('[AstroOrders] Fetched orders:', data.orders);
+      
       return {
         success: ok,
         orders: data.orders || [],
@@ -55,21 +28,15 @@ class AstrologerOrderService {
 
   /**
    * ✅ Get astrologer chat sessions
-   * Backend: ChatController.getAstrologerChatSessions
-   * GET /chat/astrologer/sessions?status=active|ended|pending...
    */
   async getAstrologerChatSessions({ page = 1, limit = 20, status } = {}) {
     try {
-      console.log('[AstroOrders] Fetching astrologer CHAT sessions...', { page, limit, status });
-
       const params = { page, limit };
       if (status) params.status = status;
 
       const res = await apiClient.get('/chat/astrologer/sessions', { params });
-      console.log('[AstroOrders] Raw chat sessions response:', res.data);
-
+      
       const ok = res.data?.success !== false;
-      // Some controllers return { success, data: { sessions, pagination } }
       const payload = res.data?.data || res.data || {};
       const sessions = payload.sessions || payload.data || payload || [];
       const pagination = payload.pagination || { page, limit, total: sessions.length, pages: 1 };
@@ -89,16 +56,8 @@ class AstrologerOrderService {
           avatar: s.userId?.profileImage || s.userId?.profilePicture || null,
           phoneNumber: s.userId?.phoneNumber || null,
         },
-        lastPreview:
-          s.lastMessagePreview ||
-          s.lastMessage ||
-          (s.lastMessage?.content ?? null),
-        lastInteractionAt:
-          s.lastInteractionAt ||
-          s.endTime ||
-          s.startTime ||
-          s.createdAt ||
-          null,
+        lastPreview: s.lastMessagePreview || s.lastMessage || (s.lastMessage?.content ?? null),
+        lastInteractionAt: s.lastInteractionAt || s.endTime || s.startTime || s.createdAt || null,
         raw: s,
       }));
 
@@ -114,37 +73,33 @@ class AstrologerOrderService {
   }
 
   /**
-   * Combined history for astrologer chats + calls
-   * Uses:
-   *   - GET /chat/astrologer/sessions
-   *   - GET /calls/astrologer/sessions
-   * Optional query: ?status=active|ended|pending...
+   * ✅ Combined history for astrologer chats + calls
    */
   async getAstrologerSessions({ page = 1, limit = 20, status } = {}) {
     try {
-
       const params = { page, limit };
       if (status) params.status = status;
 
-      // apiClient must be a configured Axios instance (no `.get` error)
+      // ✅ PARALLEL FETCH
       const [chatRes, callRes] = await Promise.all([
         apiClient.get('/chat/astrologer/sessions', { params }),
         apiClient.get('/calls/astrologer/sessions', { params }),
       ]);
 
-      console.log('[AstroOrders] Raw chat sessions response:', chatRes.data);
-      console.log('[AstroOrders] Raw call sessions response:', callRes.data);
-
       const chatOk = chatRes.data?.success !== false;
       const callOk = callRes.data?.success !== false;
 
-      const chatItems = chatOk
-        ? chatRes.data.data.sessions
-        : [];
+      // ✅ FIX: Robust extraction logic (handles res.data.data.sessions vs res.data.sessions)
+      const extractSessions = (response) => {
+        if (!response || !response.data) return [];
+        const payload = response.data.data || response.data;
+        return payload.sessions || payload.data || (Array.isArray(payload) ? payload : []);
+      };
 
-      const callItems = callOk
-        ? callRes.data.data.sessions
-        : [];
+      const chatItems = chatOk ? extractSessions(chatRes) : [];
+      const callItems = callOk ? extractSessions(callRes) : [];
+
+      console.log(`[AstroOrders] Fetched: ${chatItems.length} chats, ${callItems.length} calls`);
 
       // Normalize chat sessions
       const chatMapped = chatItems.map((s) => ({
@@ -160,21 +115,15 @@ class AstrologerOrderService {
           id: s.userId?._id || s.userId || '',
           name: s.userName || s.userId?.name || 'User',
         },
-        lastPreview:
-          s.lastMessagePreview ||
-          s.lastMessage ||
-          'Chat session',
-        lastInteractionAt:
-          s.lastInteractionAt ||
-          s.endTime ||
-          s.startTime,
+        lastPreview: s.lastMessagePreview || s.lastMessage || 'Chat session',
+        lastInteractionAt: s.lastInteractionAt || s.endTime || s.startTime,
       }));
 
       // Normalize call sessions
       const callMapped = callItems.map((s) => ({
         id: s.sessionId || s._id,
         orderId: s.orderId,
-        type: 'call',
+        type: 'call', // ✅ Explicitly setting 'call' type
         status: s.status,
         startedAt: s.startTime,
         endedAt: s.endTime,
@@ -184,13 +133,8 @@ class AstrologerOrderService {
           id: s.userId?._id || s.userId || '',
           name: s.userName || s.userId?.name || 'User',
         },
-        lastPreview: s.callType
-          ? `${s.callType.toUpperCase()} call`
-          : 'Call session',
-        lastInteractionAt:
-          s.lastInteractionAt ||
-          s.endTime ||
-          s.startTime,
+        lastPreview: s.callType ? `${s.callType.toUpperCase()} call` : 'Call session',
+        lastInteractionAt: s.lastInteractionAt || s.endTime || s.startTime,
       }));
 
       const all = [...chatMapped, ...callMapped].sort((a, b) => {
@@ -199,10 +143,7 @@ class AstrologerOrderService {
         return t2 - t1;
       });
 
-      const totalEarned = all.reduce(
-        (sum, s) => sum + (s.amount || 0),
-        0,
-      );
+      const totalEarned = all.reduce((sum, s) => sum + (s.amount || 0), 0);
 
       return {
         success: true,
